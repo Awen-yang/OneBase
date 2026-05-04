@@ -7,36 +7,86 @@ LRUKReplacer::LRUKReplacer(size_t num_frames, size_t k)
     : max_frames_(num_frames), k_(k) {}
 
 auto LRUKReplacer::Evict(frame_id_t *frame_id) -> bool {
-  // TODO(student): Implement LRU-K eviction policy
-  // - Find the frame with the largest backward k-distance
-  // - Among frames with fewer than k accesses, evict the one with earliest first access
-  // - Only consider evictable frames
-  throw NotImplementedException("LRUKReplacer::Evict");
+  std::scoped_lock lock(latch_);
+  if (curr_size_ == 0) {
+    return false;
+  }
+
+  // Frames with fewer than k accesses have +inf backward k-distance and are
+  // preferred. Among them, evict the one with the earliest first access.
+  // Otherwise evict the frame with the smallest k-th-most-recent access.
+  bool found_inf = false;
+  size_t best_score = 0;
+  frame_id_t victim = INVALID_FRAME_ID;
+
+  for (const auto &[fid, entry] : entries_) {
+    if (!entry.is_evictable_) {
+      continue;
+    }
+    if (entry.history_.size() < k_) {
+      size_t earliest = entry.history_.front();
+      if (!found_inf || earliest < best_score) {
+        found_inf = true;
+        best_score = earliest;
+        victim = fid;
+      }
+    } else if (!found_inf) {
+      size_t kth = entry.history_.front();
+      if (victim == INVALID_FRAME_ID || kth < best_score) {
+        best_score = kth;
+        victim = fid;
+      }
+    }
+  }
+
+  if (victim == INVALID_FRAME_ID) {
+    return false;
+  }
+
+  *frame_id = victim;
+  entries_.erase(victim);
+  curr_size_--;
+  return true;
 }
 
 void LRUKReplacer::RecordAccess(frame_id_t frame_id) {
-  // TODO(student): Record a new access for frame_id at current timestamp
-  // - If frame_id is new, create an entry
-  // - Add current_timestamp_ to the frame's history
-  // - Increment current_timestamp_
-  throw NotImplementedException("LRUKReplacer::RecordAccess");
+  std::scoped_lock lock(latch_);
+  auto &entry = entries_[frame_id];
+  entry.history_.push_back(current_timestamp_);
+  if (entry.history_.size() > k_) {
+    entry.history_.pop_front();
+  }
+  current_timestamp_++;
 }
 
 void LRUKReplacer::SetEvictable(frame_id_t frame_id, bool set_evictable) {
-  // TODO(student): Set whether a frame is evictable
-  // - Update curr_size_ accordingly
-  throw NotImplementedException("LRUKReplacer::SetEvictable");
+  std::scoped_lock lock(latch_);
+  auto it = entries_.find(frame_id);
+  if (it == entries_.end()) {
+    return;
+  }
+  if (it->second.is_evictable_ != set_evictable) {
+    curr_size_ += set_evictable ? 1 : -1;
+    it->second.is_evictable_ = set_evictable;
+  }
 }
 
 void LRUKReplacer::Remove(frame_id_t frame_id) {
-  // TODO(student): Remove a frame from the replacer
-  // - The frame must be evictable; throw if not
-  throw NotImplementedException("LRUKReplacer::Remove");
+  std::scoped_lock lock(latch_);
+  auto it = entries_.find(frame_id);
+  if (it == entries_.end()) {
+    return;
+  }
+  if (!it->second.is_evictable_) {
+    throw OneBaseException("Cannot remove non-evictable frame");
+  }
+  entries_.erase(it);
+  curr_size_--;
 }
 
 auto LRUKReplacer::Size() const -> size_t {
-  // TODO(student): Return the number of evictable frames
-  throw NotImplementedException("LRUKReplacer::Size");
+  std::scoped_lock lock(latch_);
+  return curr_size_;
 }
 
 }  // namespace onebase

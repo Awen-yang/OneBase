@@ -1,4 +1,5 @@
 #pragma once
+#include <algorithm>
 #include <condition_variable>
 #include <list>
 #include <mutex>
@@ -35,6 +36,9 @@ class LockManager {
     std::condition_variable cv_;
     bool upgrading_{false};
   };
+
+  static auto OnlySharedHeld(const LockRequestQueue &q, txn_id_t exclude) -> bool;
+  static auto AnyOtherGranted(const LockRequestQueue &q, txn_id_t exclude) -> bool;
 
   std::mutex latch_;
   std::unordered_map<RID, LockRequestQueue> lock_table_;

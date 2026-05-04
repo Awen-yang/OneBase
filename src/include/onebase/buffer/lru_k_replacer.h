@@ -23,7 +23,7 @@ class LRUKReplacer {
   size_t k_;
   size_t curr_size_{0};
   size_t current_timestamp_{0};
-  std::mutex latch_;
+  mutable std::mutex latch_;
 
   struct FrameEntry {
     std::list<size_t> history_;

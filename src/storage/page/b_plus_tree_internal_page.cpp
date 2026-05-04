@@ -35,64 +35,129 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetValueAt(int index, const ValueType &valu
 
 template <typename KeyType, typename ValueType, typename KeyComparator>
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::ValueIndex(const ValueType &value) const -> int {
-  // TODO(student): Find the index of the given value in the internal page
-  throw NotImplementedException("BPlusTreeInternalPage::ValueIndex");
+  for (int i = 0; i < GetSize(); ++i) {
+    if (array_[i].second == value) {
+      return i;
+    }
+  }
+  return -1;
 }
 
 template <typename KeyType, typename ValueType, typename KeyComparator>
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::Lookup(const KeyType &key, const KeyComparator &comparator) const -> ValueType {
-  // TODO(student): Find the child page that should contain the given key
-  throw NotImplementedException("BPlusTreeInternalPage::Lookup");
+  // array_[0].first is unused. Among indices [1, GetSize()), find the first
+  // one whose key > `key`; return array_[i-1].second.
+  if (GetSize() == 1) {
+    return array_[0].second;
+  }
+  int lo = 1;
+  int hi = GetSize();
+  while (lo < hi) {
+    int mid = (lo + hi) / 2;
+    if (comparator(key, array_[mid].first)) {
+      hi = mid;
+    } else {
+      lo = mid + 1;
+    }
+  }
+  return array_[lo - 1].second;
 }
 
 template <typename KeyType, typename ValueType, typename KeyComparator>
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::PopulateNewRoot(const ValueType &old_value, const KeyType &key,
                                                       const ValueType &new_value) {
-  // TODO(student): Create a new root with one key and two children
-  throw NotImplementedException("BPlusTreeInternalPage::PopulateNewRoot");
+  array_[0].second = old_value;
+  array_[1].first = key;
+  array_[1].second = new_value;
+  SetSize(2);
 }
 
 template <typename KeyType, typename ValueType, typename KeyComparator>
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::InsertNodeAfter(const ValueType &old_value, const KeyType &key,
                                                       const ValueType &new_value) -> int {
-  // TODO(student): Insert a new key-value pair after old_value
-  throw NotImplementedException("BPlusTreeInternalPage::InsertNodeAfter");
+  int idx = ValueIndex(old_value);
+  for (int i = GetSize(); i > idx + 1; --i) {
+    array_[i] = array_[i - 1];
+  }
+  array_[idx + 1].first = key;
+  array_[idx + 1].second = new_value;
+  IncreaseSize(1);
+  return GetSize();
 }
 
 template <typename KeyType, typename ValueType, typename KeyComparator>
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Remove(int index) {
-  // TODO(student): Remove the key-value pair at the given index
-  throw NotImplementedException("BPlusTreeInternalPage::Remove");
+  for (int i = index; i < GetSize() - 1; ++i) {
+    array_[i] = array_[i + 1];
+  }
+  IncreaseSize(-1);
 }
 
 template <typename KeyType, typename ValueType, typename KeyComparator>
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::RemoveAndReturnOnlyChild() -> ValueType {
-  // TODO(student): Remove all entries and return the only remaining child
-  throw NotImplementedException("BPlusTreeInternalPage::RemoveAndReturnOnlyChild");
+  ValueType only = array_[0].second;
+  SetSize(0);
+  return only;
 }
 
 template <typename KeyType, typename ValueType, typename KeyComparator>
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::MoveAllTo(BPlusTreeInternalPage *recipient, const KeyType &middle_key) {
-  // TODO(student): Move all entries to recipient during merge
-  throw NotImplementedException("BPlusTreeInternalPage::MoveAllTo");
+  // Append our entries to recipient. Our first child has no embedded key, so
+  // the parent's separator (middle_key) becomes the key for it.
+  int dst = recipient->GetSize();
+  recipient->array_[dst].first = middle_key;
+  recipient->array_[dst].second = array_[0].second;
+  for (int i = 1; i < GetSize(); ++i) {
+    recipient->array_[dst + i] = array_[i];
+  }
+  recipient->IncreaseSize(GetSize());
+  SetSize(0);
 }
 
 template <typename KeyType, typename ValueType, typename KeyComparator>
-void B_PLUS_TREE_INTERNAL_PAGE_TYPE::MoveHalfTo(BPlusTreeInternalPage *recipient, const KeyType &middle_key) {
-  // TODO(student): Move the second half of entries to recipient during split
-  throw NotImplementedException("BPlusTreeInternalPage::MoveHalfTo");
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::MoveHalfTo(BPlusTreeInternalPage *recipient,
+                                                 [[maybe_unused]] const KeyType &middle_key) {
+  // Move the second half of entries verbatim. The caller takes
+  // array_[start].first as the key to push up to the parent.
+  int total = GetSize();
+  int start = total / 2;
+  int moved = total - start;
+  for (int i = 0; i < moved; ++i) {
+    recipient->array_[i] = array_[start + i];
+  }
+  recipient->IncreaseSize(moved);
+  IncreaseSize(-moved);
 }
 
 template <typename KeyType, typename ValueType, typename KeyComparator>
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::MoveFirstToEndOf(BPlusTreeInternalPage *recipient, const KeyType &middle_key) {
-  // TODO(student): Move first entry to end of recipient (redistribute)
-  throw NotImplementedException("BPlusTreeInternalPage::MoveFirstToEndOf");
+  // Append our first child to recipient using middle_key as its separator;
+  // shift our remaining entries left by one.
+  int dst = recipient->GetSize();
+  recipient->array_[dst].first = middle_key;
+  recipient->array_[dst].second = array_[0].second;
+  recipient->IncreaseSize(1);
+  for (int i = 0; i < GetSize() - 1; ++i) {
+    array_[i] = array_[i + 1];
+  }
+  IncreaseSize(-1);
 }
 
 template <typename KeyType, typename ValueType, typename KeyComparator>
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::MoveLastToFrontOf(BPlusTreeInternalPage *recipient, const KeyType &middle_key) {
-  // TODO(student): Move last entry to front of recipient (redistribute)
-  throw NotImplementedException("BPlusTreeInternalPage::MoveLastToFrontOf");
+  // Donate our last entry to the front of recipient. The parent's old
+  // separator (middle_key) sinks into recipient's array_[1].first; recipient's
+  // original first child stays put after the shift; our donated child becomes
+  // recipient's new array_[0].second. The caller updates the parent's
+  // separator to our donated key.
+  auto last = array_[GetSize() - 1];
+  IncreaseSize(-1);
+  for (int i = recipient->GetSize(); i > 0; --i) {
+    recipient->array_[i] = recipient->array_[i - 1];
+  }
+  recipient->array_[1].first = middle_key;
+  recipient->array_[0].second = last.second;
+  recipient->IncreaseSize(1);
 }
 
 }  // namespace onebase

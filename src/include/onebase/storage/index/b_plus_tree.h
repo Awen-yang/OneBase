@@ -1,6 +1,7 @@
 #pragma once
 #include <functional>
 #include <string>
+#include <utility>
 #include <vector>
 #include "onebase/buffer/buffer_pool_manager.h"
 #include "onebase/common/rid.h"
@@ -37,6 +38,12 @@ class BPlusTree : public Index {
   auto End() -> Iterator;
 
  private:
+  // Walk down to the leaf containing `key`, recording parent page ids in
+  // `path` (if non-null) for backtracking on split or merge.
+  auto FindLeaf(const KeyType &key, std::vector<page_id_t> *path) -> page_id_t;
+  // Set the parent_page_id field of `child_pid` to `parent_pid`.
+  void Reparent(page_id_t child_pid, page_id_t parent_pid);
+
   BufferPoolManager *bpm_;
   KeyComparator comparator_;
   page_id_t root_page_id_{INVALID_PAGE_ID};

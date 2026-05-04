@@ -1,5 +1,4 @@
 #include "onebase/execution/executors/seq_scan_executor.h"
-#include "onebase/common/exception.h"
 
 namespace onebase {
 
@@ -7,17 +6,40 @@ SeqScanExecutor::SeqScanExecutor(ExecutorContext *exec_ctx, const SeqScanPlanNod
     : AbstractExecutor(exec_ctx), plan_(plan) {}
 
 void SeqScanExecutor::Init() {
-  // TODO(student): Initialize the sequential scan
-  // - Get the table from catalog using plan_->GetTableOid()
-  // - Set up iterator to table_heap->Begin()
-  throw NotImplementedException("SeqScanExecutor::Init");
+  table_info_ = GetExecutorContext()->GetCatalog()->GetTable(plan_->GetTableOid());
+  iter_ = table_info_->table_->Begin();
+  end_ = table_info_->table_->End();
 }
 
 auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
-  // TODO(student): Return the next tuple from the table
-  // - Advance iterator, skip tuples that don't match predicate
-  // - Return false when no more tuples
-  throw NotImplementedException("SeqScanExecutor::Next");
+  while (iter_ != end_) {
+    auto raw = *iter_;
+    auto r = iter_.GetRID();
+    ++iter_;
+
+    // Tuples loaded from disk only have the byte buffer; rebuild values_ so
+    // ColumnValueExpression::Evaluate (which uses GetValue without a schema)
+    // works on the predicate path.
+    std::vector<Value> vals;
+    vals.reserve(table_info_->schema_.GetColumnCount());
+    for (uint32_t i = 0; i < table_info_->schema_.GetColumnCount(); ++i) {
+      vals.push_back(raw.GetValue(&table_info_->schema_, i));
+    }
+    Tuple shaped(std::move(vals));
+    shaped.SetRID(r);
+
+    const auto &pred = plan_->GetPredicate();
+    if (pred != nullptr) {
+      auto v = pred->Evaluate(&shaped, &table_info_->schema_);
+      if (!v.GetAsBoolean()) {
+        continue;
+      }
+    }
+    *tuple = shaped;
+    *rid = r;
+    return true;
+  }
+  return false;
 }
 
 }  // namespace onebase

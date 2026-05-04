@@ -24,6 +24,10 @@ class BufferPoolManager {
   void FlushAllPages();
 
  private:
+  // Pick a free frame, evicting and flushing a victim if needed.
+  // Returns INVALID_FRAME_ID iff every frame is pinned. Caller holds latch_.
+  auto AcquireFrame() -> frame_id_t;
+
   size_t pool_size_;
   DiskManager *disk_manager_;
   std::unique_ptr<LRUKReplacer> replacer_;
